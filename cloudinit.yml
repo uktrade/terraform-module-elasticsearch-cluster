@@ -1,0 +1,179 @@
+#cloud-config
+
+datasource:
+  Ec2:
+    timeout: 60
+    max_wait: 60
+    metadata_urls:
+      - http://169.254.169.254
+      - http://instance-data
+
+package_update: true
+package_upgrade: true
+
+packages:
+- docker.io
+- jq
+- awscli
+
+write_files:
+- path: /etc/aws/aws.conf
+  permissions: '0644'
+  content: |
+    [Global]
+    Zone = ${aws_region}
+- path: /etc/elasticsearch/elasticsearch.yml
+  permissions: '0644'
+  content: |
+    # elasticsearch configuration file
+    cluster:
+      name: ${cluster_id}
+      routing.allocation.awareness.attributes: aws_availability_zone
+    node:
+      name: _ec2:privateDns_
+      master: true
+      data: true
+    cloud:
+      aws:
+        protocol: https
+        region: ${aws_region}
+      node.auto_attributes: true
+    discovery:
+      ec2:
+        availability_zones: ${aws_availability_zones}
+        node_cache_time: 120s
+        groups: ${es_discovery_sg}
+      zen:
+        hosts_provider: ec2
+        join_timeout: 600s
+        ping_timeout: 60s
+    http.port: 9200
+    transport.tcp.port: 9300
+    network.host:
+    - _eth0:ipv4_
+    - _local_
+     .bind_host: 0
+    network.publish_host: _ec2:privateIp_
+    plugin.mandatory:
+    - discovery-ec2
+    - repository-s3
+- path: /etc/elasticsearch/log4j2.properties
+  permissions: '0644'
+  content: |
+    # elasticsearch log4j configuration file
+    status = error
+    appender.console.type = Console
+    appender.console.name = console
+    appender.console.layout.type = PatternLayout
+    appender.console.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%m%n
+    rootLogger.level = info
+    rootLogger.appenderRef.console.ref = console
+- path: /etc/default/elasticsearch
+  permissions: '0644'
+  content: |
+    # elasticsearch configure options
+- path: /etc/default/elasticsearch-dockerfile
+  permissions: '0644'
+  content: |
+    ARG ES_VERSION=${es_version}
+    FROM docker.elastic.co/elasticsearch/elasticsearch:${ES_VERSION}
+    RUN bin/elasticsearch-plugin remove x-pack && \
+        bin/elasticsearch-plugin install discovery-ec2 && \
+        bin/elasticsearch-plugin install repository-s3
+- path: /etc/default/elasticsearch-stunnel-http
+  permissions: '0644'
+  content: |
+    # elasticsearch-stunnel-http configure options
+    STUNNEL_SERVICE=elasticsearch-http
+    STUNNEL_ACCEPT=${tls_http_port}
+    STUNNEL_CONNECT=localhost:${http_port}
+- path: /etc/default/elasticsearch-stunnel-transport
+  permissions: '0644'
+  content: |
+    # elasticsearch-stunnel-transport configure options
+    STUNNEL_SERVICE=elasticsearch-transport
+    STUNNEL_ACCEPT=${tls_transport_port}
+    STUNNEL_CONNECT=localhost:${transport_port}
+- path: /etc/systemd/system/elasticsearch-server.service
+  permissions: '0644'
+  content: |
+    [Unit]
+    Description=The ElasticSearch container
+    After=docker.service
+    Requires=docker.service
+    PartOf=docker.service
+    [Service]
+    EnvironmentFile=/etc/default/elasticsearch
+    ExecStartPre=-/usr/bin/docker rm -f elasticsearch
+    ExecStart=/usr/bin/docker build --no-cache --pull --tag elasticsearch:${es_version} /etc/default/elasticsearch-dockerfile && /usr/bin/docker run --name elasticsearch --hostname $(hostname).${cluster_id} --rm -v /var/lib/elasticsearch:/var/lib/elasticsearch:z -v /etc/elasticsearch:/usr/share/elasticsearch/config:ro --env-file=/etc/default/elasticsearch --network=host -p ${http_port}:${http_port} -p ${transport_port}:${transport_port} elasticsearch:${es_version} __REDIS_MASTER_REPLICATION__
+    ExecStop=/usr/bin/docker stop elasticsearch
+    SyslogIdentifier=elasticsearch
+    Restart=always
+    RestartSec=5s
+    [Install]
+    WantedBy=docker.service
+- path: /etc/systemd/system/elasticsearch-stunnel-http.service
+  permissions: '0644'
+  content: |
+    [Unit]
+    Description=The ElasticSearch STunnel HTTP container
+    After=elasticsearch.service
+    Requires=elasticsearch.service
+    PartOf=docker.service
+    [Service]
+    EnvironmentFile=/etc/default/elasticsearch-stunnel-http
+    ExecStartPre=-/usr/bin/docker rm -f elasticsearch-stunnel-http
+    ExecStart=/usr/bin/docker run --name elasticsearch-stunnel-http --hostname $(hostname).${cluster_id} --rm -v /etc/stunnel:/etc/stunnel:z --env-file=/etc/default/elasticsearch-stunnel-http --network=host -p ${tls_http_port}:${tls_http_port} dweomer/stunnel
+    ExecStop=/usr/bin/docker stop elasticsearch-stunnel-http
+    SyslogIdentifier=elasticsearch-stunnel-http
+    Restart=always
+    RestartSec=5s
+    [Install]
+    WantedBy=docker.service
+- path: /etc/systemd/system/elasticsearch-stunnel-transport.service
+  permissions: '0644'
+  content: |
+    [Unit]
+    Description=The ElasticSearch STunnel HTTP container
+    After=elasticsearch.service
+    Requires=elasticsearch.service
+    PartOf=docker.service
+    [Service]
+    EnvironmentFile=/etc/default/elasticsearch-stunnel-transport
+    ExecStartPre=-/usr/bin/docker rm -f elasticsearch-stunnel-transport
+    ExecStart=/usr/bin/docker run --name elasticsearch-stunnel-transport --hostname $(hostname).${cluster_id} --rm -v /etc/stunnel:/etc/stunnel:z --env-file=/etc/default/elasticsearch-stunnel-transport --network=host -p ${tls_transport_port}:${tls_transport_port} dweomer/stunnel
+    ExecStop=/usr/bin/docker stop elasticsearch-stunnel-http
+    SyslogIdentifier=elasticsearch-stunnel-http
+    Restart=always
+    RestartSec=5s
+    [Install]
+    WantedBy=docker.service
+- path: /etc/stunnel/stunnel.key
+  permissions: '0600'
+- path: /etc/stunnel/stunnel.pem
+  permissions: '0640'
+
+runcmd:
+- export AWS_DEFAULT_REGION=${aws_region}
+- INSTANCE_ID=$(curl -Lfs http://169.254.169.254/latest/meta-data/instance-id)
+- >
+  echo '{
+    "Comment": "auto updated @ '$(date)'",
+    "Changes": [{
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "'$(curl -Lfs http://169.254.169.254/latest/meta-data/local-hostname)'",
+        "Type": "A",
+        "TTL": 60,
+        "ResourceRecords": [{
+          "Value": "'$(curl -Lfs http://169.254.169.254/latest/meta-data/local-ipv4)'"
+        }]
+      }
+    }]
+  }' > /tmp/route53_update.json &&
+  aws route53 change-resource-record-sets --hosted-zone-id ${dns_zone_id} --change-batch file:///tmp/route53_update.json
+- echo '${tls_key}' > /etc/stunnel/stunnel.key
+- echo '${tls_cert}' > /etc/stunnel/stunnel.pem
+- systemctl daemon-reload
+- systemctl enable elasticsearch elasticsearch-stunnel-http elasticsearch-stunnel-transport
+- systemctl start elasticsearch elasticsearch-stunnel-http elasticsearch-stunnel-transport
