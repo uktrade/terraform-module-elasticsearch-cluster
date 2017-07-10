@@ -133,6 +133,13 @@ resource "aws_security_group" "es" {
     security_groups = ["${var.vpc_conf["security_group"]}"]
   }
 
+  ingress {
+    from_port = "${var.es_conf["cerebro.port"]}"
+    to_port = "${var.es_conf["cerebro.port"]}"
+    protocol = "tcp"
+    security_groups = ["${var.vpc_conf["security_group"]}"]
+  }
+
   tags {
     Name = "${var.aws_conf["domain"]}-${var.es_conf["id"]}"
     Stack = "${var.aws_conf["domain"]}"
