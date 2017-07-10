@@ -21,6 +21,8 @@ variable "es_conf" {
     tls.transport_port = "19300"
     tls.private_key = ".stunnel.key"
     tls.certificate = ".stunnel.pem"
+    cerebro.version = "latest"
+    cerebro.port = "9000"
   }
 }
 

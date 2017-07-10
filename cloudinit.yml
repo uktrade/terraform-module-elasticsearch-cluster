@@ -94,6 +94,8 @@ write_files:
     STUNNEL_SERVICE=elasticsearch-transport
     STUNNEL_ACCEPT=${tls_transport_port}
     STUNNEL_CONNECT=localhost:${transport_port}
+- path: /etc/default/elasticsearch-cerebro
+  permissions: '0644'
 - path: /etc/systemd/system/elasticsearch-server.service
   permissions: '0644'
   content: |
@@ -144,6 +146,24 @@ write_files:
     ExecStart=/usr/bin/docker run --name elasticsearch-stunnel-transport --hostname $(hostname).${cluster_id} --rm -v /etc/stunnel:/etc/stunnel:z --env-file=/etc/default/elasticsearch-stunnel-transport --network=host -p ${tls_transport_port}:${tls_transport_port} dweomer/stunnel
     ExecStop=/usr/bin/docker stop elasticsearch-stunnel-http
     SyslogIdentifier=elasticsearch-stunnel-http
+    Restart=always
+    RestartSec=5s
+    [Install]
+    WantedBy=docker.service
+- path: /etc/systemd/system/elasticsearch-cerebro.service
+  permissions: '0644'
+  content: |
+    [Unit]
+    Description=The ElasticSearch Cerebro container
+    After=elasticsearch.service
+    Requires=elasticsearch.service
+    PartOf=docker.service
+    [Service]
+    EnvironmentFile=/etc/default/elasticsearch-cerebro
+    ExecStartPre=-/usr/bin/docker rm -f elasticsearch-cerebro
+    ExecStart=/usr/bin/docker run --name elasticsearch-cerebro --hostname $(hostname).${cluster_id} --rm --env-file=/etc/default/elasticsearch-cerebro --network=host -p ${cerebro_port}:${cerebro_port} yannart/cerebro:${cerebro_version}
+    ExecStop=/usr/bin/docker stop elasticsearch-cerebro
+    SyslogIdentifier=elasticsearch-cerebro
     Restart=always
     RestartSec=5s
     [Install]

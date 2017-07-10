@@ -31,6 +31,8 @@ data "template_file" "es-cloudinit" {
     tls_transport_port = "${var.es_conf["tls.transport_port"]}"
     tls_key = "${replace(file(var.es_conf["tls.private_key"]), "\n", "\\n")}"
     tls_cert = "${replace(file(var.es_conf["tls.certificate"]), "\n", "\\n")}"
+    cerebro_version = "${var.es_conf["cerebro.version"]}"
+    cerebro_port = "${var.es_conf["cerebro.port"]}"
   }
 }
 
@@ -174,6 +176,13 @@ resource "aws_elb" "es" {
     lb_protocol = "tcp"
     instance_port = "${var.es_conf["tls.http_port"]}"
     instance_protocol = "tcp"
+  }
+
+  listener {
+    lb_port = "${var.es_conf["cerebro.port"]}"
+    lb_protocol = "http"
+    instance_port = "${var.es_conf["cerebro.port"]}"
+    instance_protocol = "http"
   }
 
   health_check {
