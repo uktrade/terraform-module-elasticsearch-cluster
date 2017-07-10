@@ -76,7 +76,7 @@ write_files:
   permissions: '0644'
   content: |
     ARG ES_VERSION=${es_version}
-    FROM docker.elastic.co/elasticsearch/elasticsearch:${ES_VERSION}
+    FROM docker.elastic.co/elasticsearch/elasticsearch:$ES_VERSION
     RUN bin/elasticsearch-plugin remove x-pack && \
         bin/elasticsearch-plugin install discovery-ec2 && \
         bin/elasticsearch-plugin install repository-s3
@@ -96,7 +96,7 @@ write_files:
     STUNNEL_CONNECT=localhost:${transport_port}
 - path: /etc/default/elasticsearch-cerebro
   permissions: '0644'
-- path: /etc/systemd/system/elasticsearch-server.service
+- path: /etc/systemd/system/elasticsearch.service
   permissions: '0644'
   content: |
     [Unit]
