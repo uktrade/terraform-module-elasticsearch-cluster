@@ -105,7 +105,7 @@ write_files:
     [Service]
     EnvironmentFile=/etc/default/elasticsearch
     ExecStartPre=-/usr/bin/docker rm -f elasticsearch
-    ExecStart=/usr/bin/docker build --no-cache --pull --tag elasticsearch:${es_version} /etc/default/elasticsearch-dockerfile && /usr/bin/docker run --name elasticsearch --hostname $(hostname).${cluster_id} --rm -v /var/lib/elasticsearch:/var/lib/elasticsearch:z -v /etc/elasticsearch:/usr/share/elasticsearch/config:ro --env-file=/etc/default/elasticsearch --network=host -p ${http_port}:${http_port} -p ${transport_port}:${transport_port} elasticsearch:${es_version} __REDIS_MASTER_REPLICATION__
+    ExecStart=/usr/bin/docker build --no-cache --pull --tag elasticsearch:${es_version} /etc/default/elasticsearch-dockerfile && /usr/bin/docker run --name elasticsearch --hostname $(hostname).${cluster_id} --rm -v /var/lib/elasticsearch:/var/lib/elasticsearch:z -v /etc/elasticsearch:/usr/share/elasticsearch/config:ro --env-file=/etc/default/elasticsearch --network=host -p ${http_port}:${http_port} -p ${transport_port}:${transport_port} elasticsearch:${es_version}
     ExecStop=/usr/bin/docker stop elasticsearch
     SyslogIdentifier=elasticsearch
     Restart=always
