@@ -27,7 +27,6 @@ data "template_file" "es-cloudinit" {
     es_discovery_sg = "${aws_security_group.es.id}"
     http_port = "${var.es_conf["http_port"]}"
     transport_port = "${var.es_conf["transport_port"]}"
-    sentinel_port = "${var.es_conf["sentinel.port"]}"
     tls_http_port = "${var.es_conf["tls.http_port"]}"
     tls_transport_port = "${var.es_conf["tls.transport_port"]}"
     tls_key = "${replace(file(var.es_conf["tls.private_key"]), "\n", "\\n")}"
