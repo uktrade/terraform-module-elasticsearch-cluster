@@ -72,11 +72,10 @@ write_files:
   permissions: '0644'
   content: |
     # elasticsearch configure options
-- path: /etc/default/elasticsearch-dockerfile
+- path: /var/lib/elasticsearch/Dockerfile
   permissions: '0644'
   content: |
-    ARG ES_VERSION=${es_version}
-    FROM docker.elastic.co/elasticsearch/elasticsearch:$ES_VERSION
+    FROM docker.elastic.co/elasticsearch/elasticsearch:${es_version}
     RUN bin/elasticsearch-plugin remove x-pack && \
         bin/elasticsearch-plugin install discovery-ec2 && \
         bin/elasticsearch-plugin install repository-s3
@@ -107,7 +106,7 @@ write_files:
     [Service]
     EnvironmentFile=/etc/default/elasticsearch
     ExecStartPre=-/usr/bin/docker rm -f elasticsearch
-    ExecStart=/usr/bin/docker build --no-cache --pull --tag elasticsearch:${es_version} /etc/default/elasticsearch-dockerfile && /usr/bin/docker run --name elasticsearch --hostname $(hostname).${cluster_id} --rm -v /var/lib/elasticsearch:/var/lib/elasticsearch:z -v /etc/elasticsearch:/usr/share/elasticsearch/config:ro --env-file=/etc/default/elasticsearch --network=host -p ${http_port}:${http_port} -p ${transport_port}:${transport_port} elasticsearch:${es_version}
+    ExecStart=/usr/bin/docker pull docker.elastic.co/elasticsearch/elasticsearch:${es_version} && /usr/bin/docker build --no-cache --pull --tag elasticsearch:${es_version} -f //var/lib/elasticsearch/Dockerfile /var/lib/elasticsearch && /usr/bin/docker run --name elasticsearch --hostname $(hostname).${cluster_id} --rm -v /var/lib/elasticsearch:/var/lib/elasticsearch:z -v /etc/elasticsearch:/usr/share/elasticsearch/config:ro --env-file=/etc/default/elasticsearch --network=host -p ${http_port}:${http_port} -p ${transport_port}:${transport_port} elasticsearch:${es_version}
     ExecStop=/usr/bin/docker stop elasticsearch
     SyslogIdentifier=elasticsearch
     Restart=always
