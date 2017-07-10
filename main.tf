@@ -170,18 +170,18 @@ resource "aws_elb" "es" {
   ]
 
   listener {
-    lb_port            = "${var.es_conf["tls.http_port"]}"
-    lb_protocol        = "tcp"
-    instance_port      = "${var.es_conf["tls.http_port"]}"
-    instance_protocol  = "tcp"
+    lb_port = "${var.es_conf["tls.http_port"]}"
+    lb_protocol = "tcp"
+    instance_port = "${var.es_conf["tls.http_port"]}"
+    instance_protocol = "tcp"
   }
 
   health_check {
-    healthy_threshold   = 5
+    healthy_threshold = 5
     unhealthy_threshold = 2
-    timeout             = 2
-    target              = "${var.es_conf["tls.http_port"]}"
-    interval            = 10
+    timeout = 2
+    target = "TCP:${var.es_conf["tls.http_port"]}"
+    interval = 10
   }
 
   connection_draining = true
