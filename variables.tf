@@ -12,7 +12,7 @@ variable "es_conf" {
   type = "map"
   default = {
     id = "es"
-    version = "5.4.3"
+    version = "5.5.0"
     capacity = "3"
     internal = "true"
     http_port = "9200"

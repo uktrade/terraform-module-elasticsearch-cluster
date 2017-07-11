@@ -31,26 +31,28 @@ write_files:
       name: ${cluster_id}
       routing.allocation.awareness.attributes: aws_availability_zone
     node:
-      name: _ec2:privateDns_
+      name: $${HOSTNAME}.${cluster_id}
       master: true
       data: true
     cloud:
       node.auto_attributes: true
+      aws.region: ${aws_region}
     discovery:
-      ec2:
-        availability_zones: ${aws_availability_zones}
-        node_cache_time: 120s
-        groups: ${es_discovery_sg}
       zen:
         hosts_provider: ec2
-        join_timeout: 600s
-        ping_timeout: 60s
+        minimum_master_nodes: 2
+      ec2:
+        availability_zones: ${aws_availability_zones}
+        groups: ${es_discovery_sg}
+        host_type: private_dns
+    network:
+      host:
+      - _local_
+      - _site_
+      - _ec2_
+      publish_host: _ec2_
     http.port: 9200
     transport.tcp.port: 9300
-    network.host:
-    - _site_
-    - _ec2_
-    network.publish_host: _ec2:privateIp_
     plugin.mandatory:
     - discovery-ec2
     - repository-s3
@@ -110,7 +112,7 @@ write_files:
     [Service]
     EnvironmentFile=/etc/default/elasticsearch-stunnel-http
     ExecStartPre=-/usr/bin/docker rm -f elasticsearch-stunnel-http
-    ExecStart=/usr/bin/docker run --name elasticsearch-stunnel-http --hostname $(hostname).${cluster_id} --rm -v /etc/stunnel:/etc/stunnel:z --env-file=/etc/default/elasticsearch-stunnel-http --network=host -p ${tls_http_port}:${tls_http_port} dweomer/stunnel
+    ExecStart=/usr/bin/docker run --name elasticsearch-stunnel-http --hostname $(hostname).${cluster_id} --rm -v /etc/stunnel/elasticsearch-http:/etc/stunnel:z --env-file=/etc/default/elasticsearch-stunnel-http --network=host -p ${tls_http_port}:${tls_http_port} dweomer/stunnel
     ExecStop=/usr/bin/docker stop elasticsearch-stunnel-http
     SyslogIdentifier=elasticsearch-stunnel-http
     Restart=always
@@ -128,7 +130,7 @@ write_files:
     [Service]
     EnvironmentFile=/etc/default/elasticsearch-stunnel-transport
     ExecStartPre=-/usr/bin/docker rm -f elasticsearch-stunnel-transport
-    ExecStart=/usr/bin/docker run --name elasticsearch-stunnel-transport --hostname $(hostname).${cluster_id} --rm -v /etc/stunnel:/etc/stunnel:z --env-file=/etc/default/elasticsearch-stunnel-transport --network=host -p ${tls_transport_port}:${tls_transport_port} dweomer/stunnel
+    ExecStart=/usr/bin/docker run --name elasticsearch-stunnel-transport --hostname $(hostname).${cluster_id} --rm -v /etc/stunnel/elasticsearch-transport:/etc/stunnel:z --env-file=/etc/default/elasticsearch-stunnel-transport --network=host -p ${tls_transport_port}:${tls_transport_port} dweomer/stunnel
     ExecStop=/usr/bin/docker stop elasticsearch-stunnel-transport
     SyslogIdentifier=elasticsearch-stunnel-transport
     Restart=always
@@ -183,9 +185,13 @@ runcmd:
 - mkdir -p /usr/share/elasticsearch
 - curl "https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-${es_version}.tar.gz" | tar xzf - -C /usr/share/elasticsearch --strip 1
 - for P in ingest-user-agent ingest-geoip discovery-ec2 repository-s3; do /usr/share/elasticsearch/bin/elasticsearch-plugin install -b $P; done
-- ln -snf /etc/elasticsearch/elasticsearch.yml /usr/share/elasticsearch/config/elasticsearch.yml
+- ln -nf /etc/elasticsearch/elasticsearch.yml /usr/share/elasticsearch/config/elasticsearch.yml
 - chown -R 1000:1000 /usr/share/elasticsearch
 - docker build --no-cache --pull --tag elasticsearch:${es_version} -f /var/lib/elasticsearch/Dockerfile /var/lib/elasticsearch
+- >
+  mkdir -p /etc/stunnel/{elasticsearch-http,elasticsearch-transport} && \
+  cp /etc/stunnel/{stunnel.key,stunnel.pem} /etc/stunnel/elasticsearch-http/ && \
+  cp /etc/stunnel/{stunnel.key,stunnel.pem} /etc/stunnel/elasticsearch-transport/
 - systemctl daemon-reload
 - systemctl enable elasticsearch elasticsearch-stunnel-http elasticsearch-stunnel-transport elasticsearch-cerebro
 - systemctl start elasticsearch elasticsearch-stunnel-http elasticsearch-stunnel-transport elasticsearch-cerebro
