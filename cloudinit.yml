@@ -15,6 +15,7 @@ packages:
 - docker.io
 - jq
 - awscli
+- openjdk-8-jdk-headless
 
 write_files:
 - path: /etc/aws/aws.conf
@@ -23,7 +24,7 @@ write_files:
     [Global]
     Zone = ${aws_region}
 - path: /etc/elasticsearch/elasticsearch.yml
-  permissions: '0644'
+  permissions: '0664'
   content: |
     # elasticsearch configuration file
     cluster:
@@ -34,9 +35,6 @@ write_files:
       master: true
       data: true
     cloud:
-      aws:
-        protocol: https
-        region: ${aws_region}
       node.auto_attributes: true
     discovery:
       ec2:
@@ -50,24 +48,12 @@ write_files:
     http.port: 9200
     transport.tcp.port: 9300
     network.host:
-    - _eth0:ipv4_
-    - _local_
-     .bind_host: 0
+    - _site_
+    - _ec2_
     network.publish_host: _ec2:privateIp_
     plugin.mandatory:
     - discovery-ec2
     - repository-s3
-- path: /etc/elasticsearch/log4j2.properties
-  permissions: '0644'
-  content: |
-    # elasticsearch log4j configuration file
-    status = error
-    appender.console.type = Console
-    appender.console.name = console
-    appender.console.layout.type = PatternLayout
-    appender.console.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%m%n
-    rootLogger.level = info
-    rootLogger.appenderRef.console.ref = console
 - path: /etc/default/elasticsearch
   permissions: '0644'
   content: |
@@ -77,8 +63,8 @@ write_files:
   content: |
     FROM docker.elastic.co/elasticsearch/elasticsearch:${es_version}
     RUN bin/elasticsearch-plugin remove x-pack && \
-        bin/elasticsearch-plugin install discovery-ec2 && \
-        bin/elasticsearch-plugin install repository-s3
+        bin/elasticsearch-plugin install -b discovery-ec2 && \
+        bin/elasticsearch-plugin install -b repository-s3
 - path: /etc/default/elasticsearch-stunnel-http
   permissions: '0644'
   content: |
@@ -106,7 +92,7 @@ write_files:
     [Service]
     EnvironmentFile=/etc/default/elasticsearch
     ExecStartPre=-/usr/bin/docker rm -f elasticsearch
-    ExecStart=/usr/bin/docker pull docker.elastic.co/elasticsearch/elasticsearch:${es_version} && /usr/bin/docker build --no-cache --pull --tag elasticsearch:${es_version} -f //var/lib/elasticsearch/Dockerfile /var/lib/elasticsearch && /usr/bin/docker run --name elasticsearch --hostname $(hostname).${cluster_id} --rm -v /var/lib/elasticsearch:/var/lib/elasticsearch:z -v /etc/elasticsearch:/usr/share/elasticsearch/config:ro --env-file=/etc/default/elasticsearch --network=host -p ${http_port}:${http_port} -p ${transport_port}:${transport_port} elasticsearch:${es_version}
+    ExecStart=/usr/bin/docker run --name elasticsearch --hostname $(hostname).${cluster_id} --rm -v /var/lib/elasticsearch:/var/lib/elasticsearch:z -v /usr/share/elasticsearch/config:/usr/share/elasticsearch/config:z --env-file=/etc/default/elasticsearch --network=host -p ${http_port}:${http_port} -p ${transport_port}:${transport_port} elasticsearch:${es_version}
     ExecStop=/usr/bin/docker stop elasticsearch
     SyslogIdentifier=elasticsearch
     Restart=always
@@ -143,8 +129,8 @@ write_files:
     EnvironmentFile=/etc/default/elasticsearch-stunnel-transport
     ExecStartPre=-/usr/bin/docker rm -f elasticsearch-stunnel-transport
     ExecStart=/usr/bin/docker run --name elasticsearch-stunnel-transport --hostname $(hostname).${cluster_id} --rm -v /etc/stunnel:/etc/stunnel:z --env-file=/etc/default/elasticsearch-stunnel-transport --network=host -p ${tls_transport_port}:${tls_transport_port} dweomer/stunnel
-    ExecStop=/usr/bin/docker stop elasticsearch-stunnel-http
-    SyslogIdentifier=elasticsearch-stunnel-http
+    ExecStop=/usr/bin/docker stop elasticsearch-stunnel-transport
+    SyslogIdentifier=elasticsearch-stunnel-transport
     Restart=always
     RestartSec=5s
     [Install]
@@ -193,6 +179,13 @@ runcmd:
   aws route53 change-resource-record-sets --hosted-zone-id ${dns_zone_id} --change-batch file:///tmp/route53_update.json
 - echo '${tls_key}' > /etc/stunnel/stunnel.key
 - echo '${tls_cert}' > /etc/stunnel/stunnel.pem
+- sysctl -w vm.max_map_count=262144
+- mkdir -p /usr/share/elasticsearch
+- curl "https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-${es_version}.tar.gz" | tar xzf - -C /usr/share/elasticsearch --strip 1
+- for P in ingest-user-agent ingest-geoip discovery-ec2 repository-s3; do /usr/share/elasticsearch/bin/elasticsearch-plugin install -b $P; done
+- ln -snf /etc/elasticsearch/elasticsearch.yml /usr/share/elasticsearch/config/elasticsearch.yml
+- chown -R 1000:1000 /usr/share/elasticsearch
+- docker build --no-cache --pull --tag elasticsearch:${es_version} -f /var/lib/elasticsearch/Dockerfile /var/lib/elasticsearch
 - systemctl daemon-reload
-- systemctl enable elasticsearch elasticsearch-stunnel-http elasticsearch-stunnel-transport
-- systemctl start elasticsearch elasticsearch-stunnel-http elasticsearch-stunnel-transport
+- systemctl enable elasticsearch elasticsearch-stunnel-http elasticsearch-stunnel-transport elasticsearch-cerebro
+- systemctl start elasticsearch elasticsearch-stunnel-http elasticsearch-stunnel-transport elasticsearch-cerebro
