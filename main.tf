@@ -154,8 +154,8 @@ resource "aws_security_group" "es-elb" {
   vpc_id = "${var.vpc_conf["id"]}"
 
   ingress {
-    from_port = "${var.es_conf["tls.http_port"]}"
-    to_port = "${var.es_conf["tls.http_port"]}"
+    from_port = "${var.es_conf["http_port"]}"
+    to_port = "${var.es_conf["http_port"]}"
     protocol = "tcp"
     security_groups = ["${var.vpc_conf["security_group"]}"]
   }
@@ -186,10 +186,11 @@ resource "aws_elb" "es" {
   ]
 
   listener {
-    lb_port = "${var.es_conf["tls.http_port"]}"
-    lb_protocol = "tcp"
+    lb_port = "${var.es_conf["http_port"]}"
+    lb_protocol = "https"
     instance_port = "${var.es_conf["tls.http_port"]}"
-    instance_protocol = "tcp"
+    instance_protocol = "https"
+    ssl_certificate_id = "${var.vpc_conf["acm_certificate"]}"
   }
 
   listener {
