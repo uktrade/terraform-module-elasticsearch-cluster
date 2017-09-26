@@ -14,6 +14,7 @@ variable "es_conf" {
     id = "es"
     version = "5.5.0"
     capacity = "3"
+    storage = "5"
     internal = "true"
     http_port = "9200"
     transport_port = "9300"

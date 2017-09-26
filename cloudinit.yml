@@ -11,6 +11,14 @@ datasource:
 package_update: true
 package_upgrade: true
 
+fs_setup:
+  - label: data
+    filesystem: ext4
+    device: /dev/xvdd
+
+mounts:
+  - [ /dev/xvdd, /var/lib/elasticsearch, "auto" ]
+
 packages:
 - docker.io
 - jq
@@ -60,7 +68,7 @@ write_files:
   permissions: '0644'
   content: |
     # elasticsearch configure options
-- path: /var/lib/elasticsearch/Dockerfile
+- path: /etc/elasticsearch/Dockerfile
   permissions: '0644'
   content: |
     FROM docker.elastic.co/elasticsearch/elasticsearch:${es_version}
@@ -170,7 +178,7 @@ runcmd:
 - for P in ingest-user-agent ingest-geoip discovery-ec2 repository-s3; do /usr/share/elasticsearch/bin/elasticsearch-plugin install -b $P; done
 - ln -nf /etc/elasticsearch/elasticsearch.yml /usr/share/elasticsearch/config/elasticsearch.yml
 - chown -R 1000:1000 /usr/share/elasticsearch
-- docker build --no-cache --pull --tag elasticsearch:${es_version} -f /var/lib/elasticsearch/Dockerfile /var/lib/elasticsearch
+- docker build --no-cache --pull --tag elasticsearch:${es_version} -f /etc/elasticsearch/Dockerfile /etc/elasticsearch
 - >
   mkdir -p /etc/stunnel/{elasticsearch-http,elasticsearch-transport} && \
   cp /etc/stunnel/{stunnel.key,stunnel.pem} /etc/stunnel/elasticsearch-http/ && \
