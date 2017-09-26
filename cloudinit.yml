@@ -177,7 +177,7 @@ runcmd:
 - curl "https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-${es_version}.tar.gz" | tar xzf - -C /usr/share/elasticsearch --strip 1
 - for P in ingest-user-agent ingest-geoip discovery-ec2 repository-s3; do /usr/share/elasticsearch/bin/elasticsearch-plugin install -b $P; done
 - ln -nf /etc/elasticsearch/elasticsearch.yml /usr/share/elasticsearch/config/elasticsearch.yml
-- chown -R 1000:1000 /usr/share/elasticsearch
+- chown -R 1000:1000 /usr/share/elasticsearch /var/log/elasticsearch /var/lib/elasticsearch
 - docker build --no-cache --pull --tag elasticsearch:${es_version} -f /etc/elasticsearch/Dockerfile /etc/elasticsearch
 - >
   mkdir -p /etc/stunnel/{elasticsearch-http,elasticsearch-transport} && \
