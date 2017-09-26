@@ -102,7 +102,7 @@ write_files:
     [Service]
     EnvironmentFile=/etc/default/elasticsearch
     ExecStartPre=-/usr/bin/docker rm -f elasticsearch
-    ExecStart=/usr/bin/docker run --name elasticsearch --hostname $(hostname).${cluster_id} --rm -v /var/lib/elasticsearch:/var/lib/elasticsearch:z -v /usr/share/elasticsearch/config:/usr/share/elasticsearch/config:z --env-file=/etc/default/elasticsearch --network=host -p ${http_port}:${http_port} -p ${transport_port}:${transport_port} elasticsearch:${es_version}
+    ExecStart=/usr/bin/docker run --name elasticsearch --hostname $(hostname).${cluster_id} --rm -v /var/lib/elasticsearch:/usr/share/elasticsearch/data:z -v /var/log/elasticsearch:/usr/share/elasticsearch/logs:z -v /usr/share/elasticsearch/config:/usr/share/elasticsearch/config:z --env-file=/etc/default/elasticsearch --network=host -p ${http_port}:${http_port} -p ${transport_port}:${transport_port} elasticsearch:${es_version}
     ExecStop=/usr/bin/docker stop elasticsearch
     SyslogIdentifier=elasticsearch
     Restart=always
@@ -173,7 +173,7 @@ runcmd:
 - echo '${tls_key}' > /etc/stunnel/stunnel.key
 - echo '${tls_cert}' > /etc/stunnel/stunnel.pem
 - sysctl -w vm.max_map_count=262144
-- mkdir -p /usr/share/elasticsearch
+- mkdir -p /usr/share/elasticsearch /var/log/elasticsearch
 - curl "https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-${es_version}.tar.gz" | tar xzf - -C /usr/share/elasticsearch --strip 1
 - for P in ingest-user-agent ingest-geoip discovery-ec2 repository-s3; do /usr/share/elasticsearch/bin/elasticsearch-plugin install -b $P; done
 - ln -nf /etc/elasticsearch/elasticsearch.yml /usr/share/elasticsearch/config/elasticsearch.yml
