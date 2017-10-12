@@ -19,11 +19,12 @@ variable "es_conf" {
     http_port = "9200"
     transport_port = "9300"
     tls.http_port = "19200"
-    tls.transport_port = "19300"
     tls.private_key = ".stunnel.key"
     tls.certificate = ".stunnel.pem"
     cerebro.version = "latest"
     cerebro.port = "9000"
+    auth.user = "user"
+    auth.passwd = "pass"
   }
 }
 

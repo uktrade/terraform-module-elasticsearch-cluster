@@ -23,6 +23,8 @@ packages:
 - docker.io
 - jq
 - awscli
+- nginx
+- apache2-utils
 - openjdk-8-jdk-headless
 
 write_files:
@@ -39,7 +41,7 @@ write_files:
       name: ${cluster_id}
       routing.allocation.awareness.attributes: aws_availability_zone
     node:
-      name: $${HOSTNAME}.${cluster_id}
+      name: $${HOSTNAME}.${domain}
       master: true
       data: true
     cloud:
@@ -75,20 +77,33 @@ write_files:
     RUN bin/elasticsearch-plugin remove x-pack && \
         bin/elasticsearch-plugin install -b discovery-ec2 && \
         bin/elasticsearch-plugin install -b repository-s3
-- path: /etc/default/elasticsearch-stunnel-http
+- path: /etc/default/elasticsearch-https
   permissions: '0644'
   content: |
-    # elasticsearch-stunnel-http configure options
-    STUNNEL_SERVICE=elasticsearch-http
-    STUNNEL_ACCEPT=${tls_http_port}
-    STUNNEL_CONNECT=localhost:${http_port}
-- path: /etc/default/elasticsearch-stunnel-transport
+    # elasticsearch-https-proxy configure options
+- path: /etc/nginx/conf.d/es.conf
   permissions: '0644'
   content: |
-    # elasticsearch-stunnel-transport configure options
-    STUNNEL_SERVICE=elasticsearch-transport
-    STUNNEL_ACCEPT=${tls_transport_port}
-    STUNNEL_CONNECT=localhost:${transport_port}
+    server {
+      listen ${tls_http_port} default_server;
+      server_name _;
+      ssl on;
+      ssl_certificate /etc/nginx/ssl/nginx.pem;
+      ssl_certificate_key /etc/nginx/ssl/nginx.key;
+      ssl_protocols TLSv1.2 TLSv1.1 TLSv1;
+      ssl_ciphers "EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH";
+      set $upstream_endpoint http://localhost:9200;
+      auth_basic "${cluster_id}";
+      auth_basic_user_file /etc/nginx/conf.d/.htpasswd;
+      location ~ ^/(_shutdown) {
+        return 403;
+      }
+      location / {
+        proxy_pass http://$upstream_endpoint;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+      }
+    }
 - path: /etc/default/elasticsearch-cerebro
   permissions: '0644'
 - path: /etc/systemd/system/elasticsearch.service
@@ -102,45 +117,27 @@ write_files:
     [Service]
     EnvironmentFile=/etc/default/elasticsearch
     ExecStartPre=-/usr/bin/docker rm -f elasticsearch
-    ExecStart=/usr/bin/docker run --name elasticsearch --hostname $(hostname).${cluster_id} --rm -v /var/lib/elasticsearch:/usr/share/elasticsearch/data:z -v /var/log/elasticsearch:/usr/share/elasticsearch/logs:z -v /usr/share/elasticsearch/config:/usr/share/elasticsearch/config:z --env-file=/etc/default/elasticsearch --network=host -p ${http_port}:${http_port} -p ${transport_port}:${transport_port} elasticsearch:${es_version}
+    ExecStart=/usr/bin/docker run --name elasticsearch --hostname $(hostname).${domain} --rm -v /var/lib/elasticsearch:/usr/share/elasticsearch/data:z -v /var/log/elasticsearch:/usr/share/elasticsearch/logs:z -v /usr/share/elasticsearch/config:/usr/share/elasticsearch/config:z --env-file=/etc/default/elasticsearch --network=host -p ${http_port}:${http_port} -p ${transport_port}:${transport_port} elasticsearch:${es_version}
     ExecStop=/usr/bin/docker stop elasticsearch
     SyslogIdentifier=elasticsearch
     Restart=always
     RestartSec=5s
     [Install]
     WantedBy=docker.service
-- path: /etc/systemd/system/elasticsearch-stunnel-http.service
+- path: /etc/systemd/system/elasticsearch-https.service
   permissions: '0644'
   content: |
     [Unit]
-    Description=The ElasticSearch STunnel HTTP container
+    Description=The ElasticSearch HTTPS Proxy container
     After=elasticsearch.service
     Requires=elasticsearch.service
     PartOf=docker.service
     [Service]
-    EnvironmentFile=/etc/default/elasticsearch-stunnel-http
-    ExecStartPre=-/usr/bin/docker rm -f elasticsearch-stunnel-http
-    ExecStart=/usr/bin/docker run --name elasticsearch-stunnel-http --hostname $(hostname).${cluster_id} --rm -v /etc/stunnel/elasticsearch-http:/etc/stunnel:z --env-file=/etc/default/elasticsearch-stunnel-http --network=host -p ${tls_http_port}:${tls_http_port} dweomer/stunnel
-    ExecStop=/usr/bin/docker stop elasticsearch-stunnel-http
-    SyslogIdentifier=elasticsearch-stunnel-http
-    Restart=always
-    RestartSec=5s
-    [Install]
-    WantedBy=docker.service
-- path: /etc/systemd/system/elasticsearch-stunnel-transport.service
-  permissions: '0644'
-  content: |
-    [Unit]
-    Description=The ElasticSearch STunnel HTTP container
-    After=elasticsearch.service
-    Requires=elasticsearch.service
-    PartOf=docker.service
-    [Service]
-    EnvironmentFile=/etc/default/elasticsearch-stunnel-transport
-    ExecStartPre=-/usr/bin/docker rm -f elasticsearch-stunnel-transport
-    ExecStart=/usr/bin/docker run --name elasticsearch-stunnel-transport --hostname $(hostname).${cluster_id} --rm -v /etc/stunnel/elasticsearch-transport:/etc/stunnel:z --env-file=/etc/default/elasticsearch-stunnel-transport --network=host -p ${tls_transport_port}:${tls_transport_port} dweomer/stunnel
-    ExecStop=/usr/bin/docker stop elasticsearch-stunnel-transport
-    SyslogIdentifier=elasticsearch-stunnel-transport
+    EnvironmentFile=/etc/default/elasticsearch-https
+    ExecStartPre=-/usr/bin/docker rm -f elasticsearch-https
+    ExecStart=/usr/bin/docker run --name elasticsearch-https --hostname $(hostname).${domain} --rm -v /etc/nginx:/etc/nginx:ro -v /var/log/nginx:/var/log/nginx:z --env-file=/etc/default/elasticsearch-https --network=host -p ${tls_http_port}:${tls_http_port} nginx
+    ExecStop=/usr/bin/docker stop elasticsearch-https
+    SyslogIdentifier=elasticsearch-https
     Restart=always
     RestartSec=5s
     [Install]
@@ -156,22 +153,23 @@ write_files:
     [Service]
     EnvironmentFile=/etc/default/elasticsearch-cerebro
     ExecStartPre=-/usr/bin/docker rm -f elasticsearch-cerebro
-    ExecStart=/usr/bin/docker run --name elasticsearch-cerebro --hostname $(hostname).${cluster_id} --rm --env-file=/etc/default/elasticsearch-cerebro --network=host -p ${cerebro_port}:${cerebro_port} yannart/cerebro:${cerebro_version}
+    ExecStart=/usr/bin/docker run --name elasticsearch-cerebro --hostname $(hostname).${domain} --rm --env-file=/etc/default/elasticsearch-cerebro --network=host -p ${cerebro_port}:${cerebro_port} yannart/cerebro:${cerebro_version}
     ExecStop=/usr/bin/docker stop elasticsearch-cerebro
     SyslogIdentifier=elasticsearch-cerebro
     Restart=always
     RestartSec=5s
     [Install]
     WantedBy=docker.service
-- path: /etc/stunnel/stunnel.key
+- path: /etc/nginx/ssl/nginx.key
   permissions: '0600'
-- path: /etc/stunnel/stunnel.pem
+- path: /etc/nginx/ssl/nginx.pem
   permissions: '0640'
 
 runcmd:
 - export AWS_DEFAULT_REGION=${aws_region}
-- echo '${tls_key}' > /etc/stunnel/stunnel.key
-- echo '${tls_cert}' > /etc/stunnel/stunnel.pem
+- echo '${tls_key}' > /etc/nginx/ssl/nginx.key
+- echo '${tls_cert}' > /etc/nginx/ssl/nginx.pem
+- htpasswd -bc /etc/nginx/conf.d/.htpasswd ${auth_user} ${auth_pass}
 - sysctl -w vm.max_map_count=262144
 - mkdir -p /usr/share/elasticsearch /var/log/elasticsearch
 - curl "https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-${es_version}.tar.gz" | tar xzf - -C /usr/share/elasticsearch --strip 1
@@ -179,10 +177,6 @@ runcmd:
 - ln -nf /etc/elasticsearch/elasticsearch.yml /usr/share/elasticsearch/config/elasticsearch.yml
 - chown -R 1000:1000 /usr/share/elasticsearch /var/log/elasticsearch /var/lib/elasticsearch
 - docker build --no-cache --pull --tag elasticsearch:${es_version} -f /etc/elasticsearch/Dockerfile /etc/elasticsearch
-- >
-  mkdir -p /etc/stunnel/{elasticsearch-http,elasticsearch-transport} && \
-  cp /etc/stunnel/{stunnel.key,stunnel.pem} /etc/stunnel/elasticsearch-http/ && \
-  cp /etc/stunnel/{stunnel.key,stunnel.pem} /etc/stunnel/elasticsearch-transport/
 - systemctl daemon-reload
-- systemctl enable elasticsearch elasticsearch-stunnel-http elasticsearch-stunnel-transport elasticsearch-cerebro
-- systemctl start elasticsearch elasticsearch-stunnel-http elasticsearch-stunnel-transport elasticsearch-cerebro
+- systemctl enable elasticsearch elasticsearch-https elasticsearch-cerebro
+- systemctl start elasticsearch elasticsearch-https elasticsearch-cerebro

@@ -22,17 +22,19 @@ data "template_file" "es-cloudinit" {
     aws_region = "${var.vpc_conf["region"]}"
     aws_availability_zones = "${var.vpc_conf["availability_zones"]}"
     dns_zone_id = "${var.vpc_conf["zone_id"]}"
-    cluster_id = "${var.aws_conf["domain"]}"
+    cluster_id = "${var.es_conf["id"]}.${var.aws_conf["domain"]}"
+    domain = "${var.aws_conf["domain"]}"
     es_version = "${var.es_conf["version"]}"
     es_discovery_sg = "${aws_security_group.es.id}"
     http_port = "${var.es_conf["http_port"]}"
     transport_port = "${var.es_conf["transport_port"]}"
     tls_http_port = "${var.es_conf["tls.http_port"]}"
-    tls_transport_port = "${var.es_conf["tls.transport_port"]}"
     tls_key = "${replace(file(var.es_conf["tls.private_key"]), "\n", "\\n")}"
     tls_cert = "${replace(file(var.es_conf["tls.certificate"]), "\n", "\\n")}"
     cerebro_version = "${var.es_conf["cerebro.version"]}"
     cerebro_port = "${var.es_conf["cerebro.port"]}"
+    auth_user = "${var.es_conf["auth.user"]}"
+    auth_pass = "${var.es_conf["auth.passwd"]}"
   }
 }
 
@@ -134,13 +136,6 @@ resource "aws_security_group" "es" {
   }
 
   ingress {
-    from_port = "${var.es_conf["tls.transport_port"]}"
-    to_port = "${var.es_conf["tls.transport_port"]}"
-    protocol = "tcp"
-    security_groups = ["${var.vpc_conf["security_group"]}"]
-  }
-
-  ingress {
     from_port = "${var.es_conf["cerebro.port"]}"
     to_port = "${var.es_conf["cerebro.port"]}"
     protocol = "tcp"
@@ -204,7 +199,8 @@ resource "aws_elb" "es" {
     lb_port = "${var.es_conf["cerebro.port"]}"
     lb_protocol = "http"
     instance_port = "${var.es_conf["cerebro.port"]}"
-    instance_protocol = "http"
+    instance_protocol = "https"
+    ssl_certificate_id = "${var.vpc_conf["acm_certificate"]}"
   }
 
   health_check {
