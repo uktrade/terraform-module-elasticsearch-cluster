@@ -33,8 +33,8 @@ data "template_file" "es-cloudinit" {
     tls_cert = "${replace(file(var.es_conf["tls.certificate"]), "\n", "\\n")}"
     cerebro_version = "${var.es_conf["cerebro.version"]}"
     cerebro_port = "${var.es_conf["cerebro.port"]}"
-    auth_user = "${var.es_conf["auth.user"]}"
-    auth_pass = "${var.es_conf["auth.passwd"]}"
+    auth_user = "${var.es_conf["id"]}"
+    auth_pass = "${var.es_conf["auth"]}"
   }
 }
 

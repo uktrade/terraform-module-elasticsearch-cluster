@@ -23,8 +23,7 @@ variable "es_conf" {
     tls.certificate = ".stunnel.pem"
     cerebro.version = "latest"
     cerebro.port = "9000"
-    auth.user = "user"
-    auth.passwd = "pass"
+    auth = "pass"
   }
 }
 
