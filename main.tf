@@ -199,7 +199,7 @@ resource "aws_elb" "es" {
     lb_port = "${var.es_conf["cerebro.port"]}"
     lb_protocol = "https"
     instance_port = "${var.es_conf["cerebro.port"]}"
-    instance_protocol = "https"
+    instance_protocol = "http"
     ssl_certificate_id = "${var.vpc_conf["acm_certificate"]}"
   }
 
