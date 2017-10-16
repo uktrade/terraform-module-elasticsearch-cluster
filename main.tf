@@ -197,7 +197,7 @@ resource "aws_elb" "es" {
 
   listener {
     lb_port = "${var.es_conf["cerebro.port"]}"
-    lb_protocol = "http"
+    lb_protocol = "https"
     instance_port = "${var.es_conf["cerebro.port"]}"
     instance_protocol = "https"
     ssl_certificate_id = "${var.vpc_conf["acm_certificate"]}"
