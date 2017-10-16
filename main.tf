@@ -156,8 +156,8 @@ resource "aws_security_group" "es-elb" {
   vpc_id = "${var.vpc_conf["id"]}"
 
   ingress {
-    from_port = "${var.es_conf["http_port"]}"
-    to_port = "${var.es_conf["http_port"]}"
+    from_port = "${var.es_conf["tls.http_port"]}"
+    to_port = "${var.es_conf["tls.http_port"]}"
     protocol = "tcp"
     security_groups = ["${var.vpc_conf["security_group"]}"]
   }
